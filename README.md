@@ -2,7 +2,7 @@
 
 A C# / .NET dashboard service and console runner for **Dental Clinic Management System** (`DENTAL_CLINIC_MS`), designed to aggregate daily appointments, dental chair occupancy, waiting patients, daily revenue, and chair utilization in a UI-agnostic snapshot.
 
-![Dental Clinic Management System Dashboard Preview](docs/dashboard-preview.png)
+![Dental Clinic Management System Dashboard Preview](assets/dashboard-preview.png)
 
 ## Overview
 

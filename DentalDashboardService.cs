@@ -1,184 +1,141 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace DentalClinic.Dashboard;
 
-public enum AppointmentStatus
-{
-    Scheduled,
-    CheckedIn,
-    InChair,
-    Completed,
-    Cancelled,
-    NoShow
-}
-
-public enum ChairState
-{
-    Available,
-    Occupied,
-    Sanitizing,
-    OutOfService
-}
-
-public sealed record DentalAppointment(
-    Guid Id,
-    string PatientName,
-    string DentistName,
-    string Procedure,
-    int ChairNumber,
-    DateTime StartTime,
-    TimeSpan Duration,
-    decimal EstimatedFee,
-    AppointmentStatus Status
-);
-
-public sealed record DentalChairStatus(
-    int ChairNumber,
-    ChairState State,
-    string? CurrentPatientName,
-    string? CurrentDentistName,
-    DateTime? OccupiedSince
-);
-
-public sealed record DashboardKpis(
-    int TotalAppointmentsToday,
-    int CompletedToday,
-    int ActiveInChair,
-    int PendingCheckIn,
-    int NoShowsOrCancelled,
-    int AvailableChairs,
+public sealed record KpiSummary(
+    int AppointmentsCompleted,
+    int AppointmentsTotal,
+    int CompletedCount,
+    int ActiveCount,
+    int PendingCount,
+    int NoShowCount,
+    int ActiveChairs,
     int TotalChairs,
-    decimal CollectedOrScheduledRevenueToday,
-    double AverageChairUtilizationPercent
+    int ChairUtilizationPercent,
+    int PatientsWaiting,
+    int AvgWaitMinutes,
+    decimal DailyRevenue,
+    decimal ProjectedRevenue,
+    int TargetPercent,
+    int RevenueDeltaPercent
 );
 
-public sealed record DentalDashboardSnapshot(
-    DateOnly Date,
-    DashboardKpis Kpis,
-    IReadOnlyList<DentalChairStatus> Chairs,
-    IReadOnlyList<DentalAppointment> UpcomingAppointments,
-    IReadOnlyList<DentalAppointment> CompletedAppointments
+public sealed record ChairCard(
+    int ChairNumber,
+    string BadgeText,
+    string BadgeType, // "occupied", "checked-in", "available"
+    string? PatientName,
+    string? Procedure,
+    string? DentistName,
+    string? TimeLabel,
+    string? TimeValue,
+    int? ProgressElapsedMin,
+    int? ProgressTotalMin,
+    string? NextPatientInfo,
+    bool ShowToothIcon
 );
 
-public interface IDentalClinicRepository
-{
-    Task<IReadOnlyList<DentalAppointment>> GetAppointmentsForDateAsync(DateOnly date, CancellationToken ct = default);
-    Task<int> GetTotalChairsAsync(CancellationToken ct = default);
-}
+public sealed record DentistStatus(
+    string Name,
+    string StatusText,
+    string? DetailText,
+    bool IsActive
+);
+
+public sealed record QueueRow(
+    string Time,
+    string Chair,
+    string PatientName,
+    string Procedure,
+    string Dentist,
+    string Status,
+    string StatusCss
+);
+
+public sealed record ProcedureSlice(
+    string Label,
+    int Percent,
+    string ColorHex
+);
+
+public sealed record DashboardViewModel(
+    string ClinicTitle,
+    string Subtitle,
+    string ShiftStatus,
+    string ClockText,
+    string LoggedInUser,
+    KpiSummary Kpis,
+    IReadOnlyList<ChairCard> Chairs,
+    IReadOnlyList<DentistStatus> Dentists,
+    IReadOnlyList<QueueRow> Queue,
+    IReadOnlyList<ProcedureSlice> Procedures,
+    IReadOnlyList<string> Alerts
+);
 
 public sealed class DentalDashboardService
 {
-    private readonly IDentalClinicRepository _repository;
-    private readonly TimeProvider _timeProvider;
-
-    public DentalDashboardService(IDentalClinicRepository repository, TimeProvider? timeProvider = null)
+    public DashboardViewModel GetSampleDashboard()
     {
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-        _timeProvider = timeProvider ?? TimeProvider.System;
-    }
-
-    public async Task<DentalDashboardSnapshot> GetDashboardAsync(DateOnly? targetDate = null, CancellationToken ct = default)
-    {
-        DateTime now = _timeProvider.GetLocalNow().DateTime;
-        DateOnly date = targetDate ?? DateOnly.FromDateTime(now);
-
-        int totalChairs = await _repository.GetTotalChairsAsync(ct);
-        IReadOnlyList<DentalAppointment> appointments = await _repository.GetAppointmentsForDateAsync(date, ct);
-
-        List<DentalAppointment> orderedAppointments = appointments
-            .OrderBy(a => a.StartTime)
-            .ToList();
-
-        List<DentalChairStatus> chairs = BuildChairStatuses(totalChairs, orderedAppointments, now);
-
-        int completedCount = orderedAppointments.Count(a => a.Status == AppointmentStatus.Completed);
-        int inChairCount = orderedAppointments.Count(a => a.Status == AppointmentStatus.InChair);
-        int pendingCheckInCount = orderedAppointments.Count(a =>
-            a.Status is AppointmentStatus.Scheduled or AppointmentStatus.CheckedIn);
-        int missedCount = orderedAppointments.Count(a =>
-            a.Status is AppointmentStatus.Cancelled or AppointmentStatus.NoShow);
-
-        decimal revenueToday = orderedAppointments
-            .Where(a => a.Status is not AppointmentStatus.Cancelled and not AppointmentStatus.NoShow)
-            .Sum(a => a.EstimatedFee);
-
-        int availableChairsCount = chairs.Count(c => c.State == ChairState.Available);
-
-        // Utilization based on scheduled/completed active chair minutes vs. an 8-hour (480 min) clinic day per chair
-        double activeMinutes = orderedAppointments
-            .Where(a => a.Status is AppointmentStatus.Completed or AppointmentStatus.InChair or AppointmentStatus.CheckedIn)
-            .Sum(a => a.Duration.TotalMinutes);
-
-        double totalAvailableMinutes = Math.Max(1, totalChairs * 480.0);
-        double utilizationPercent = Math.Clamp((activeMinutes / totalAvailableMinutes) * 100.0, 0.0, 100.0);
-
-        DashboardKpis kpis = new(
-            TotalAppointmentsToday: orderedAppointments.Count,
-            CompletedToday: completedCount,
-            ActiveInChair: inChairCount,
-            PendingCheckIn: pendingCheckInCount,
-            NoShowsOrCancelled: missedCount,
-            AvailableChairs: availableChairsCount,
-            TotalChairs: totalChairs,
-            CollectedOrScheduledRevenueToday: revenueToday,
-            AverageChairUtilizationPercent: Math.Round(utilizationPercent, 1)
+        return new DashboardViewModel(
+            ClinicTitle: "DENTAL_CLINIC_MS",
+            Subtitle: "Main Dashboard • Dr. Kareem's Practice • Today, November 25, 2026",
+            ShiftStatus: "Open • Shift A",
+            ClockText: "03:52 PM",
+            LoggedInUser: "Dr. Kareem (Admin)",
+            Kpis: new KpiSummary(
+                AppointmentsCompleted: 18,
+                AppointmentsTotal: 24,
+                CompletedCount: 6,
+                ActiveCount: 3,
+                PendingCount: 12,
+                NoShowCount: 3,
+                ActiveChairs: 3,
+                TotalChairs: 4,
+                ChairUtilizationPercent: 75,
+                PatientsWaiting: 4,
+                AvgWaitMinutes: 14,
+                DailyRevenue: 2840.00m,
+                ProjectedRevenue: 3650.00m,
+                TargetPercent: 78,
+                RevenueDeltaPercent: 12
+            ),
+            Chairs:
+            [
+                new(1, "OCCUPIED", "occupied", "Layla Hassan", "Root Canal (Tooth #36)", "Dr. Kareem", "Since:", "03:15 PM", 35, 60, null, true),
+                new(2, "OCCUPIED", "occupied", "Omar Farooq", "Composite Filling", "Dr. Nora", "Since:", "03:30 PM", 15, 45, null, true),
+                new(3, "CHECKED IN", "checked-in", "Sara Mahmood", "Scaling & Polishing", "Dr. Kareem", "Scheduled:", "04:00 PM", null, null, null, false),
+                new(4, "AVAILABLE", "available", null, null, null, null, null, null, null, "Next: Zaid Ali (04:15 PM - Crown Prep)", false)
+            ],
+            Dentists:
+            [
+                new("Dr. Kareem", "Active", "Chair 1", true),
+                new("Dr. Nora", "Active", "Chair 2", true),
+                new("Dr. Sarah", "On Break", null, false),
+                new("Dr. Ahmed", "On Call", null, false)
+            ],
+            Queue:
+            [
+                new("03:15 PM", "Chair 1", "Layla Hassan", "Root Canal (Tooth #36)", "Dr. Kareem", "In Chair", "in-chair"),
+                new("03:30 PM", "Chair 2", "Omar Farooq", "Composite Filling", "Dr. Nora", "In Chair", "in-chair"),
+                new("03:45 PM", "Chair 3", "Sara Mahmood", "Scaling & Polishing", "Dr. Kareem", "Checked In", "checked-in"),
+                new("04:15 PM", "Chair 4", "Zaid Ali", "Crown Prep", "Dr. Nora", "Scheduled", "scheduled"),
+                new("04:45 PM", "Chair 1", "Huda Tariq", "Routine Checkup", "Dr. Kareem", "Scheduled", "scheduled")
+            ],
+            Procedures:
+            [
+                new("Root Canal", 25, "#3b82f6"),
+                new("Cleaning", 35, "#06b6d4"),
+                new("Fillings", 20, "#6366f1"),
+                new("Crowns", 15, "#f59e0b"),
+                new("Extractions", 5, "#ef4444")
+            ],
+            Alerts:
+            [
+                "Patient checked in: Sara Mahmood (Chair 3)",
+                "Procedure completed: Layla Hassan (Chair 1)",
+                "Reminder: Chair 4 sterilization check done"
+            ]
         );
-
-        List<DentalAppointment> upcoming = orderedAppointments
-            .Where(a => a.Status is AppointmentStatus.Scheduled or AppointmentStatus.CheckedIn or AppointmentStatus.InChair)
-            .ToList();
-
-        List<DentalAppointment> completed = orderedAppointments
-            .Where(a => a.Status == AppointmentStatus.Completed)
-            .ToList();
-
-        return new DentalDashboardSnapshot(
-            Date: date,
-            Kpis: kpis,
-            Chairs: chairs,
-            UpcomingAppointments: upcoming,
-            CompletedAppointments: completed
-        );
-    }
-
-    private static List<DentalChairStatus> BuildChairStatuses(
-        int totalChairs,
-        IReadOnlyList<DentalAppointment> appointments,
-        DateTime now)
-    {
-        var result = new List<DentalChairStatus>(totalChairs);
-
-        for (int chairNum = 1; chairNum <= totalChairs; chairNum++)
-        {
-            DentalAppointment? activeAppt = appointments.FirstOrDefault(a =>
-                a.ChairNumber == chairNum && a.Status == AppointmentStatus.InChair);
-
-            if (activeAppt is not null)
-            {
-                result.Add(new DentalChairStatus(
-                    ChairNumber: chairNum,
-                    State: ChairState.Occupied,
-                    CurrentPatientName: activeAppt.PatientName,
-                    CurrentDentistName: activeAppt.DentistName,
-                    OccupiedSince: activeAppt.StartTime <= now ? activeAppt.StartTime : now
-                ));
-            }
-            else
-            {
-                result.Add(new DentalChairStatus(
-                    ChairNumber: chairNum,
-                    State: ChairState.Available,
-                    CurrentPatientName: null,
-                    CurrentDentistName: null,
-                    OccupiedSince: null
-                ));
-            }
-        }
-
-        return result;
     }
 }

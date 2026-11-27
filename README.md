@@ -22,19 +22,19 @@ The system separates core clinic domain logic, operational metrics, and clinical
 Displays daily appointment counts, chair occupancy, waiting patients, daily revenue, live dental chair status, active/upcoming queues, dentist availability, procedure breakdowns, and recent activity alerts[cite: 1].
 
 ### 2. Interactive Odontogram & Treatment Charting
-![Interactive 3D Dental Odontogram and Treatment Charting](assets/f1.png)
+![Interactive 3D Dental Odontogram and Treatment Charting](assets/f1.jpg)
 Tracks patient clinical details and allergies alongside an interactive tooth map (caries, crown, root canal, missing, implant), quick charting actions, clinical treatment notes, a treatment planning checklist, and a historical/planned treatment timeline[cite: 2].
 
 ### 3. Smart Appointment Scheduler & No-Show Risk Analytics
-![Smart Appointment Scheduler and No-Show Risk Analytics](assets/f2.png)
+![Smart Appointment Scheduler and No-Show Risk Analytics](assets/f2.jpg)
 Features a multi-chair weekly schedule grid, automated chair conflict detection and resolution alerts, no-show risk scoring with outreach actions, and available slot optimization suggestions[cite: 3].
 
 ### 4. Digital Invoice, Treatment Plan Costing & Sterilization Audit
-![Digital Invoice, Treatment Plan Costing and Sterilization Audit](assets/f3.png)
+![Digital Invoice, Treatment Plan Costing and Sterilization Audit](assets/f3.jpg)
 Combines itemized billing and installment tracking for multi-stage treatment plans with autoclave sterilization cycle logs (temperature, pressure, duration, indicator/audit status) and compliance checks[cite: 4].
 
 ### 5. Clinic Analytics, Role-Based Access & Audit Trail
-![Clinic Analytics, Role-Based Access and Audit Trail](assets/f4.png)
+![Clinic Analytics, Role-Based Access and Audit Trail](assets/f4.jpg)
 Visualizes revenue against chair utilization rates, enforces role permissions across Admins, Dentists, and Receptionists, and records a timestamped system activity audit log[cite: 5].
 
 ## Project Structure

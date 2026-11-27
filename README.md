@@ -1,4 +1,4 @@
-# DENTAL_CLINIC_MS — Dental Clinic Management System 🦷💻
+# Smart Dental Clinic Management System with Interactive Odontogram, Risk-Aware Scheduling, and Compliance Auditing in C# 🦷💻
 
 A C# / .NET management system, dashboard service, and console/UI architecture for **Dental Clinic Management System** (`DENTAL_CLINIC_MS`), designed to aggregate daily clinic operations, clinical charting, smart scheduling, staged billing, sterilization compliance, and role-based governance.
 
